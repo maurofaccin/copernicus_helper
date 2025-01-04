@@ -79,7 +79,7 @@ def get_country(
     if ndigits is not None:
         box = [round(x, ndigits=ndigits) for x in box]
 
-    return box[-1] + box[:-1]
+    return [box[-1]] + box[:-1]
 
 
 def main() -> None:
