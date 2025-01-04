@@ -27,6 +27,10 @@ def get_data_from_copernicus(
         ],
         Go [here](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=download) to find the other names
     """
+    if Path(filename).is_file():
+        # do not download the same data multiple times
+        return
+
     dataset = "reanalysis-era5-single-levels"
     request = {
         "product_type": "reanalysis",
@@ -53,8 +57,9 @@ def get_country(
     """Get country bounding box.
 
     If only `code2` is provided, the smaller box including all subunits is returned.
-
     Data from https://www.naturalearthdata.com/
+
+    The box is [north, west, south, east] as required by copernicus.
     """
     print("Checking", code2)
     units = countries.country_subunits_by_iso_code(code2)
@@ -74,7 +79,7 @@ def get_country(
     if ndigits is not None:
         box = [round(x, ndigits=ndigits) for x in box]
 
-    return box
+    return box[-1] + box[:-1]
 
 
 def main() -> None:
