@@ -1,6 +1,6 @@
 """Use this to download copernicus data."""
 
-import sys
+import argparse
 from pathlib import Path
 
 import cdsapi
@@ -12,6 +12,7 @@ def get_data_from_copernicus(
     year: int = 2011,
     variable: str = "instantaneous_10m_wind_gust",
     area: list[int] = [1, -1, -1, 1],  # this should be [north, west, south, east]
+    dataset: str = "single-levels",
 ):
     """Retrieve data from Copernicus and save locally as nc file.
 
@@ -31,7 +32,7 @@ def get_data_from_copernicus(
         # do not download the same data multiple times
         return
 
-    dataset = "reanalysis-era5-single-levels"
+    dataset = "reanalysis-era5-" + dataset
     request = {
         "product_type": "reanalysis",
         "variable": variable,
@@ -51,15 +52,28 @@ def get_data_from_copernicus(
 def get_country(
     code2: str,
     subunit: str | None = None,
-    ndigits: int | None = 2,  # ~1km
     padding: float | None = 0.1,  # ~10Km
-):
+) -> list[float]:
     """Get country bounding box.
 
     If only `code2` is provided, the smaller box including all subunits is returned.
     Data from https://www.naturalearthdata.com/
 
     The box is [north, west, south, east] as required by copernicus.
+
+    Arguments
+    ---------
+    code2 : str
+        Country code (2 chars)
+    subunit: str
+        Name of the subunit
+    padding: float
+        Padding to apply to the box
+
+    Returns
+    -------
+    box : list[float]
+        The box
     """
     print("Checking", code2)
     units = countries.country_subunits_by_iso_code(code2)
@@ -76,10 +90,53 @@ def get_country(
     if padding is not None:
         box = [box[0] - padding, box[1] - padding, box[2] + padding, box[3] + padding]
 
-    if ndigits is not None:
-        box = [round(x, ndigits=ndigits) for x in box]
-
     return [box[-1]] + box[:-1]
+
+
+def cache_location(default: str | None = None) -> Path:
+    """Return the right location to save data."""
+    if default is None:
+        location = Path("/dataNfs")
+        if location.is_dir():
+            return location
+
+        location = Path("~/copernicus_data").expanduser()
+
+    else:
+        location = Path(default).expanduser()
+
+    location.mkdir(parents=True, exist_ok=True)
+    return location
+
+
+def args() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Helper to download Copernicus data.")
+    parser.add_argument(
+        "--variable",
+        "-v",
+        default="total_precipitation",
+        help="variable name (default: total_precipitation)",
+    )
+    parser.add_argument(
+        "--country",
+        "-c",
+        default="IT",
+        help="Country to restrict (2chars code, default: IT)",
+    )
+    parser.add_argument(
+        "--dataset",
+        "--ds",
+        action="store",
+        default="single-levels",
+        choices=["single-levels", "land", "pressure-levels"],
+        help="Dataset: single-levels (default), land, …",
+    )
+    parser.add_argument(
+        "--folder",
+        "-o",
+        help="Output folder. (default: check if /dataNfs is present, else ~/copernicus_data)",
+    )
+    return parser
 
 
 def main() -> None:
@@ -90,9 +147,14 @@ def main() -> None:
     Example:
         copernicus.py instantaneous_10m_wind_gust IT
     """
-    variable = sys.argv[-2]
-    country = sys.argv[-1]
-    location = Path("/dataNfs") / f"{variable}_{country}"
+
+    arguments = args().parse_args()
+    variable = arguments.variable
+    country = arguments.country
+
+    location = (
+        cache_location(arguments.folder) / f"{country}_{variable}_{arguments.dataset}"
+    )
     location.mkdir(parents=True, exist_ok=True)
 
     for year in range(2000, 2101):
@@ -101,6 +163,7 @@ def main() -> None:
             year=year,
             variable=variable,
             area=get_country(country),
+            dataset=arguments.dataset,
         )
 
 
