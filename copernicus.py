@@ -11,7 +11,7 @@ def get_data_from_copernicus(
     filename: str | Path,
     year: int = 2011,
     variable: str = "instantaneous_10m_wind_gust",
-    area: list[int] = [1, -1, -1, 1],  # this should be [north, west, south, east]
+    area: list[float] = [1, -1, -1, 1],  # This should be [north, west, south, east].
     dataset: str = "single-levels",
 ):
     """Retrieve data from Copernicus and save locally as nc file.
@@ -136,6 +136,7 @@ def args() -> argparse.ArgumentParser:
         "-o",
         help="Output folder. (default: check if /dataNfs is present, else ~/copernicus_data)",
     )
+    parser.add_argument("--time-range", "-y", default="2000-2100")
     return parser
 
 
@@ -151,13 +152,15 @@ def main() -> None:
     arguments = args().parse_args()
     variable = arguments.variable
     country = arguments.country
+    year1, year2 = map(int, arguments.time_range.split("-"))
 
     location = (
         cache_location(arguments.folder) / f"{country}_{variable}_{arguments.dataset}"
     )
     location.mkdir(parents=True, exist_ok=True)
 
-    for year in range(2000, 2101):
+    for year in range(year1, year2 + 1):
+        print("Download from Copernicus", year)
         get_data_from_copernicus(
             filename=location / f"{variable}_{country}_{year}.nc",
             year=year,
