@@ -160,9 +160,13 @@ def main() -> None:
     location.mkdir(parents=True, exist_ok=True)
 
     for year in range(year1, year2 + 1):
+        fname = location / f"{variable}_{country}_{year}.nc"
+        if fname.is_file():
+            print("Already downloaded", fname)
+            continue
         print("Download from Copernicus", year)
         get_data_from_copernicus(
-            filename=location / f"{variable}_{country}_{year}.nc",
+            filename=fname,
             year=year,
             variable=variable,
             area=get_country(country),
