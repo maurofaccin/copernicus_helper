@@ -1,7 +1,8 @@
-"""Use this to download copernicus data."""
+"""Use this to download Copernicus data."""
 
 import argparse
 from pathlib import Path
+from typing import Literal
 
 import cdsapi
 import country_bounding_boxes as countries
@@ -14,19 +15,21 @@ def get_data_from_copernicus(
     area: list[float] = [1, -1, -1, 1],  # This should be [north, west, south, east].
     dataset: str = "single-levels",
 ):
-    """Retrieve data from Copernicus and save locally as nc file.
+    """Retrieve data from Copernicus and save locally as `.nc` file.
 
-    variable can be any of the following:
-        [
-            "10m_u_component_of_wind",
-            "10m_v_component_of_wind",
-            "2m_dewpoint_temperature",
-            "2m_temperature",
-            "mean_sea_level_pressure",
-            "total_precipitation",
-            "instantaneous_10m_wind_gust"
-        ],
-        Go [here](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=download) to find the other names
+    `variable` can be any of the following:
+    ```
+    [
+        "10m_u_component_of_wind",
+        "10m_v_component_of_wind",
+        "2m_dewpoint_temperature",
+        "2m_temperature",
+        "mean_sea_level_pressure",
+        "total_precipitation",
+        "instantaneous_10m_wind_gust"
+    ],
+    ```
+    Go [here](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=download) to find the other names
     """
     if Path(filename).is_file():
         # do not download the same data multiple times
@@ -44,8 +47,49 @@ def get_data_from_copernicus(
         "download_format": "unarchived",
         "area": area,
     }
+    for k, v in request.items():
+        print(f"{k:20s} : {v}")
 
     client = cdsapi.Client()
+    client.retrieve(dataset, request).download(filename)
+
+
+def get_projections_from_copernicus(
+    filename: str | Path,
+    resolution: Literal["daily", "monthly"] = "monthly",
+    experiment: Literal["historical", "ssp1_2_6", "ssp2_4_5", "ssp3_7_0"] = "historical",
+    year: int | str = 2000,
+    variable: str = "daily_maximum_near_surface_air_temperature",
+    area: list[float] = [90, -180, -90, 180],  # This should be [north, west, south, east].
+):
+    """Retrieve data from Copernicus and save locally as `.nc` file.
+
+    ```
+    Go [here](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=download) to find the other names
+    """
+    if Path(filename).is_file():
+        # do not download the same data multiple times
+        return
+
+    dataset = "projections-cmip6"
+    request = {
+        "variable": variable,
+        "temporal_resolution": resolution,
+        "experiment": experiment,
+        "year": [str(year)],
+        "month": [f"{m:02d}" for m in range(1, 13)],
+        "time": [f"{h:02d}:00" for h in range(24)],
+        "data_format": "netcdf",
+        "download_format": "unarchived",
+        "area": area,
+    }
+    if resolution == "daily":
+        request |= {"day": [f"{d:02d}" for d in range(1, 32)]}
+
+    for k, v in request.items():
+        print(f"{k:20s} : {v}")
+
+    client = cdsapi.Client(url=None, key=None)
     client.retrieve(dataset, request).download(filename)
 
 
@@ -121,15 +165,23 @@ def args() -> argparse.ArgumentParser:
         "--country",
         "-c",
         default="IT",
-        help="Country to restrict (2chars code, default: IT)",
+        help="Country to restrict (2chars code, default: IT, you can also select a subunit as in ES:Spain)",
     )
     parser.add_argument(
         "--dataset",
         "--ds",
         action="store",
-        default="single-levels",
+        default=None,
         choices=["single-levels", "land", "pressure-levels"],
-        help="Dataset: single-levels (default), land, …",
+        help="Dataset: single-levels (default), land, …, for ERA5.",
+    )
+    parser.add_argument(
+        "--experiment",
+        "-x",
+        action="store",
+        default=None,
+        choices=["historical", "ssp1_2_6", "ssp2_4_5", "ssp3_7_0"],
+        help="Download the given expariment from CMIP6.",
     )
     parser.add_argument(
         "--folder",
@@ -148,30 +200,61 @@ def main() -> None:
     Example:
         copernicus.py instantaneous_10m_wind_gust IT
     """
-
     arguments = args().parse_args()
-    variable = arguments.variable
-    country = arguments.country
-    year1, year2 = map(int, arguments.time_range.split("-"))
 
-    location = (
-        cache_location(arguments.folder) / f"{country}_{variable}_{arguments.dataset}"
-    )
+    # Check arguments:
+    if arguments.experiment is None and arguments.dataset is None:
+        raise ValueError("Arguments: you should supply either the experiment or the dataset.")
+    if arguments.experiment is not None:
+        print(f"Experiment:  {arguments.experiment}")
+    elif arguments.dataset is not None:
+        print(f"Dataset:     {arguments.dataset}")
+
+    variable = arguments.variable
+    print(f"Variable:    {variable}")
+    country = arguments.country
+    if ":" in country:
+        country, subunit = country.split(":")
+    else:
+        subunit = None
+    print(f"Country:     {country}, {subunit}")
+    year1, year2 = map(int, arguments.time_range.split("-"))
+    print(f"Year:        {year1} - {year2}")
+
+    location = cache_location(arguments.folder) / f"{country}_{variable}_{arguments.dataset}"
     location.mkdir(parents=True, exist_ok=True)
+    print(f"Folder:      {location}")
 
     for year in range(year1, year2 + 1):
-        fname = location / f"{variable}_{country}_{year}.nc"
-        if fname.is_file():
-            print("Already downloaded", fname)
-            continue
-        print("Download from Copernicus", year)
-        get_data_from_copernicus(
-            filename=fname,
-            year=year,
-            variable=variable,
-            area=get_country(country),
-            dataset=arguments.dataset,
-        )
+        print(f"Downloading {year}")
+
+        if arguments.experiment is not None:
+            # Get CMIP6 projection data from Copernicus.
+            fname = location / f"{variable}_{arguments.experiment}_{country}_{year}.nc"
+            if fname.is_file():
+                print("Already downloaded", fname)
+                continue
+            get_projections_from_copernicus(
+                filename=fname,
+                resolution="monthly",
+                experiment=arguments.experiment,
+                year=year,
+                variable=variable,
+                area=get_country(country, subunit=subunit),
+            )
+        elif arguments.dataset is not None:
+            # Get re-projection ERA5 data from Copernicus.
+            fname = location / f"{variable}_{arguments.dataset}_{country}_{year}.nc"
+            if fname.is_file():
+                print("Already downloaded", fname)
+                continue
+            get_data_from_copernicus(
+                filename=fname,
+                year=year,
+                variable=variable,
+                area=get_country(country, subunit=subunit),
+                dataset=arguments.dataset,
+            )
 
 
 if __name__ == "__main__":
