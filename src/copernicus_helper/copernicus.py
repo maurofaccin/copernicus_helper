@@ -1,11 +1,22 @@
 """Use this to download Copernicus data."""
 
+import os
 import argparse
 from pathlib import Path
 from typing import Literal
 
+from rich import print
 import cdsapi
 import country_bounding_boxes as countries
+
+
+CDSAPI_KEY = os.environ.get("CDSAPI_KEY", None)
+CDSAPI_URL = os.environ.get("CDSAPI_URL", None)
+
+print("Using Key", CDSAPI_KEY)
+print("Using URL", CDSAPI_URL)
+
+CMIP_MODELS = ["access_cm2"]
 
 
 def get_data_from_copernicus(
@@ -50,7 +61,7 @@ def get_data_from_copernicus(
     for k, v in request.items():
         print(f"{k:20s} : {v}")
 
-    client = cdsapi.Client()
+    client = cdsapi.Client(url=CDSAPI_URL, key=CDSAPI_KEY)
     client.retrieve(dataset, request).download(filename)
 
 
@@ -58,7 +69,8 @@ def get_projections_from_copernicus(
     filename: str | Path,
     resolution: Literal["daily", "monthly"] = "monthly",
     experiment: Literal["historical", "ssp1_2_6", "ssp2_4_5", "ssp3_7_0"] = "historical",
-    year: int | str = 2000,
+    model: str = "access_cm2",
+    years: tuple[int, int] = (2000, 2025),
     variable: str = "daily_maximum_near_surface_air_temperature",
     area: list[float] = [90, -180, -90, 180],  # This should be [north, west, south, east].
 ):
@@ -76,11 +88,11 @@ def get_projections_from_copernicus(
         "variable": variable,
         "temporal_resolution": resolution,
         "experiment": experiment,
-        "year": [str(year)],
+        "year": [str(year) for year in range(years[0], years[1] + 1)],
+        "model": model,
         "month": [f"{m:02d}" for m in range(1, 13)],
-        "time": [f"{h:02d}:00" for h in range(24)],
-        "data_format": "netcdf",
-        "download_format": "unarchived",
+        # "data_format": "netcdf",
+        # "download_format": "unarchived",
         "area": area,
     }
     if resolution == "daily":
@@ -89,7 +101,8 @@ def get_projections_from_copernicus(
     for k, v in request.items():
         print(f"{k:20s} : {v}")
 
-    client = cdsapi.Client(url=None, key=None)
+    print(request)
+    client = cdsapi.Client(url=CDSAPI_URL, key=CDSAPI_KEY)
     client.retrieve(dataset, request).download(filename)
 
 
@@ -120,6 +133,9 @@ def get_country(
         The box
     """
     print("Checking", code2)
+    if code2 == "full":
+        return [90, -180, -90, 180]
+
     units = countries.country_subunits_by_iso_code(code2)
     if subunit is None:
         boxes = [unit.bbox for unit in units]
@@ -164,7 +180,7 @@ def args() -> argparse.ArgumentParser:
     parser.add_argument(
         "--country",
         "-c",
-        default="IT",
+        default="full",
         help="Country to restrict (2chars code, default: IT, you can also select a subunit as in ES:Spain)",
     )
     parser.add_argument(
@@ -182,6 +198,9 @@ def args() -> argparse.ArgumentParser:
         default=None,
         choices=["historical", "ssp1_2_6", "ssp2_4_5", "ssp3_7_0"],
         help="Download the given expariment from CMIP6.",
+    )
+    parser.add_argument(
+        "--model", "-m", default=None, help="The model used in the CMIP6 projections."
     )
     parser.add_argument(
         "--folder",
@@ -221,30 +240,30 @@ def main() -> None:
     year1, year2 = map(int, arguments.time_range.split("-"))
     print(f"Year:        {year1} - {year2}")
 
-    location = cache_location(arguments.folder) / f"{country}_{variable}_{arguments.dataset}"
+    location = cache_location(arguments.folder) / f"{country}_{variable}"
     location.mkdir(parents=True, exist_ok=True)
     print(f"Folder:      {location}")
 
-    for year in range(year1, year2 + 1):
-        print(f"Downloading {year}")
-
-        if arguments.experiment is not None:
-            # Get CMIP6 projection data from Copernicus.
-            fname = location / f"{variable}_{arguments.experiment}_{country}_{year}.nc"
-            if fname.is_file():
-                print("Already downloaded", fname)
-                continue
+    if arguments.experiment is not None:
+        # Get CMIP6 projection data from Copernicus.
+        fname = location / f"{arguments.experiment}_{arguments.model}_{arguments.time_range}.nc"
+        print(fname)
+        if not fname.is_file():
             get_projections_from_copernicus(
                 filename=fname,
                 resolution="monthly",
                 experiment=arguments.experiment,
-                year=year,
+                model=arguments.model,
+                years=(year1, year2),
                 variable=variable,
                 area=get_country(country, subunit=subunit),
             )
-        elif arguments.dataset is not None:
-            # Get re-projection ERA5 data from Copernicus.
-            fname = location / f"{variable}_{arguments.dataset}_{country}_{year}.nc"
+    elif arguments.dataset is not None:
+        # Get re-projection ERA5 data from Copernicus.
+        for year in range(year1, year2 + 1):
+            print(f"Downloading {year}")
+
+            fname = location / f"{arguments.dataset}_{year}.nc"
             if fname.is_file():
                 print("Already downloaded", fname)
                 continue

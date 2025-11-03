@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["cdsapi>=0.7.5", "country-bounding-boxes>=0.2.3"]
+dependencies = [
+    "cdsapi>=0.7.5",
+    "country-bounding-boxes>=0.2.3",
+    "rich>=14.2.0",
+]
 
 [project.scripts]
 copernicus_helper = "copernicus_helper.copernicus:main"
