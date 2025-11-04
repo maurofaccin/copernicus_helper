@@ -110,6 +110,7 @@ def get_projections_from_copernicus(
         ncfile = next((x for x in zipped.namelist() if x[-3:] == ".nc"), None)
         if ncfile is not None:
             tmpfile = zipped.extract(member=ncfile)
+            print(tmpfile)
             Path(tmpfile).replace(filename)
     filename.with_suffix(".zip").unlink(missing_ok=True)
 
