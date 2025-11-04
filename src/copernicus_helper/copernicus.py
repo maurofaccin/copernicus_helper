@@ -4,6 +4,7 @@ import os
 import argparse
 from pathlib import Path
 from typing import Literal
+from zipfile import ZipFile
 
 from rich import print
 import cdsapi
@@ -66,7 +67,7 @@ def get_data_from_copernicus(
 
 
 def get_projections_from_copernicus(
-    filename: str | Path,
+    filename: Path,
     resolution: Literal["daily", "monthly"] = "monthly",
     experiment: Literal["historical", "ssp1_2_6", "ssp2_4_5", "ssp3_7_0"] = "historical",
     model: str = "access_cm2",
@@ -91,6 +92,7 @@ def get_projections_from_copernicus(
         "year": [str(year) for year in range(years[0], years[1] + 1)],
         "model": model,
         "month": [f"{m:02d}" for m in range(1, 13)],
+        # CMIP ignore the following
         # "data_format": "netcdf",
         # "download_format": "unarchived",
         "area": area,
@@ -103,7 +105,15 @@ def get_projections_from_copernicus(
 
     print(request)
     client = cdsapi.Client(url=CDSAPI_URL, key=CDSAPI_KEY)
-    client.retrieve(dataset, request).download(filename)
+
+    # Unzip
+    print("unzip")
+    client.retrieve(dataset, request).download(filename.with_suffix(".zip"))
+    with ZipFile(filename.with_suffix(".zip"), "r") as zipped:
+        ncfile = next((x for x in zipped.namelist() if x[-3:] == ".nc"), None)
+        if ncfile is not None:
+            tmpfile = zipped.extract(member=ncfile)
+            Path(tmpfile).replace(filename)
 
 
 def get_country(
