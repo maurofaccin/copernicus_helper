@@ -5,7 +5,6 @@ import argparse
 from pathlib import Path
 from typing import Literal
 from zipfile import ZipFile
-import shutil
 
 from rich import print
 import cdsapi
@@ -110,8 +109,8 @@ def get_projections_from_copernicus(
     with ZipFile(filename.with_suffix(".zip"), "r") as zipped:
         ncfile = next((x for x in zipped.namelist() if x[-3:] == ".nc"), None)
         if ncfile is not None:
-            tmpfile = zipped.extract(member=ncfile)
-            shutil.move(tmpfile, filename)
+            tmpfile = zipped.extract(member=ncfile, path=filename.parent)
+            Path(tmpfile).replace(filename)
     filename.with_suffix(".zip").unlink(missing_ok=True)
 
 
