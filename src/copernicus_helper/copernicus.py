@@ -100,20 +100,18 @@ def get_projections_from_copernicus(
     if resolution == "daily":
         request |= {"day": [f"{d:02d}" for d in range(1, 32)]}
 
-    for k, v in request.items():
-        print(f"{k:20s} : {v}")
-
     print(request)
     client = cdsapi.Client(url=CDSAPI_URL, key=CDSAPI_KEY)
 
     # Unzip
-    print("unzip")
+    print("Unzip")
     client.retrieve(dataset, request).download(filename.with_suffix(".zip"))
     with ZipFile(filename.with_suffix(".zip"), "r") as zipped:
         ncfile = next((x for x in zipped.namelist() if x[-3:] == ".nc"), None)
         if ncfile is not None:
             tmpfile = zipped.extract(member=ncfile)
             Path(tmpfile).replace(filename)
+    filename.with_suffix(".zip").unlink(missing_ok=True)
 
 
 def get_country(
