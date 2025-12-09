@@ -10,6 +10,7 @@ from rich import print
 import cdsapi
 import country_bounding_boxes as countries
 
+SEP = ":"
 
 CDSAPI_KEY = os.environ.get("CDSAPI_KEY", None)
 CDSAPI_URL = os.environ.get("CDSAPI_URL", None)
@@ -92,7 +93,7 @@ def get_projections_from_copernicus(
         "year": [str(year) for year in range(years[0], years[1] + 1)],
         "model": model,
         "month": [f"{m:02d}" for m in range(1, 13)],
-        # CMIP ignore the following
+        # CMIP ignores the following
         # "data_format": "netcdf",
         # "download_format": "unarchived",
         "area": area,
@@ -208,7 +209,17 @@ def args() -> argparse.ArgumentParser:
         help="Download the given expariment from CMIP6.",
     )
     parser.add_argument(
-        "--model", "-m", default=None, help="The model used in the CMIP6 projections."
+        "--model",
+        "-m",
+        default=None,
+        action="store",
+        help="The model used in the CMIP6 projections.",
+    )
+    parser.add_argument(
+        "--monthly",
+        default=False,
+        action="store_true",
+        help="If monthly values should be fetched instead of daily.",
     )
     parser.add_argument(
         "--folder",
@@ -248,18 +259,23 @@ def main() -> None:
     year1, year2 = map(int, arguments.time_range.split("-"))
     print(f"Year:        {year1} - {year2}")
 
-    location = cache_location(arguments.folder) / f"{country}_{variable}"
+    monthly = "monthly" if arguments.monthly else "daily"
+    location = cache_location(arguments.folder) / f"{country}{SEP}{monthly}{SEP}{variable}"
     location.mkdir(parents=True, exist_ok=True)
     print(f"Folder:      {location}")
 
     if arguments.experiment is not None:
         # Get CMIP6 projection data from Copernicus.
-        fname = location / f"{arguments.experiment}_{arguments.model}_{arguments.time_range}.nc"
+        fname = (
+            location / f"{arguments.experiment}{SEP}{arguments.model}{SEP}{arguments.time_range}.nc"
+        )
         print(fname)
-        if not fname.is_file():
+        if fname.is_file():
+            print("Already downloaded", fname)
+        else:
             get_projections_from_copernicus(
                 filename=fname,
-                resolution="monthly",
+                resolution="monthly" if arguments.monthly else "daily",
                 experiment=arguments.experiment,
                 model=arguments.model,
                 years=(year1, year2),
@@ -271,7 +287,7 @@ def main() -> None:
         for year in range(year1, year2 + 1):
             print(f"Downloading {year}")
 
-            fname = location / f"{arguments.dataset}_{year}.nc"
+            fname = location / f"{arguments.dataset}{SEP}{year}.nc"
             if fname.is_file():
                 print("Already downloaded", fname)
                 continue
