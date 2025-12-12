@@ -1,16 +1,15 @@
 """Use this to download Copernicus data."""
 
-import os
 import argparse
+import os
 from pathlib import Path
 from typing import Literal
 from zipfile import ZipFile
 
-import xarray as xr
-
-from rich import print
 import cdsapi
 import country_bounding_boxes as countries
+import xarray as xr
+from rich import print
 
 SEP = ":"
 
@@ -72,7 +71,9 @@ def get_data_from_copernicus(
 def get_projections_from_copernicus(
     filename: Path,
     resolution: Literal["daily", "monthly"] = "monthly",
-    experiment: Literal["historical", "ssp1_2_6", "ssp2_4_5", "ssp3_7_0", "ssp5_8_5"] = "historical",
+    experiment: Literal[
+        "historical", "ssp1_2_6", "ssp2_4_5", "ssp3_7_0", "ssp5_8_5"
+    ] = "historical",
     model: str = "access_cm2",
     years: tuple[int, int] = (2000, 2025),
     variable: str = "daily_maximum_near_surface_air_temperature",
@@ -112,16 +113,17 @@ def get_projections_from_copernicus(
     with ZipFile(filename.with_suffix(".zip"), "r") as zipped:
         ncfiles = [x for x in zipped.namelist() if x.endswith(".nc")]
         print(ncfiles)
-        if ncfiles is not None:
+        if len(ncfiles) > 0:
             for item in ncfiles:
                 print(f"Extracting {item}")
                 tmpfile = zipped.extract(member=item, path=filename.parent)
             print("Joining files...")
-            ds = xr.open_mfdataset(ncfiles,
-                                   combine="by_coords",    # 
-                                   coords = ["time"],                              
-                                   )
-            
+            ds = xr.open_mfdataset(
+                ncfiles,
+                combine="by_coords",  #
+                coords=["time"],
+            )
+
             start_date = str(ds.time[0].dt.strftime("%Y%m%d").data)
             end_date = str(ds.time[-1].dt.strftime("%Y%m%d").data)
             fnameout = ncfiles[0].rsplit("_", 1)[0] + f"_{start_date}-{end_date}.nc"
@@ -129,7 +131,7 @@ def get_projections_from_copernicus(
             ds.to_netcdf(fnameout)
         else:
             raise FileNotFoundError("No nc files found in folder!")
-    
+
     filename.with_suffix(".zip").unlink(missing_ok=True)
 
 
