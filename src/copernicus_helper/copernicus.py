@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Literal
 from zipfile import ZipFile
 
+import xarray as xr
+
 from rich import print
 import cdsapi
 import country_bounding_boxes as countries
@@ -108,10 +110,26 @@ def get_projections_from_copernicus(
     print("Unzip")
     client.retrieve(dataset, request).download(filename.with_suffix(".zip"))
     with ZipFile(filename.with_suffix(".zip"), "r") as zipped:
-        ncfile = next((x for x in zipped.namelist() if x[-3:] == ".nc"), None)
-        if ncfile is not None:
-            tmpfile = zipped.extract(member=ncfile, path=filename.parent)
-            Path(tmpfile).replace(filename)
+        ncfiles = [x for x in zipped.namelist() if x.endswith(".nc")]
+        print(ncfiles)
+        if ncfiles is not None:
+            for item in ncfiles:
+                print(f"Extracting {item}")
+                tmpfile = zipped.extract(member=item, path=filename.parent)
+            print("Joining files...")
+            ds = xr.open_mfdataset(ncfiles,
+                                   combine="by_coords",    # 
+                                   coords = ["time"],                              
+                                   )
+            
+            start_date = str(ds.time[0].dt.strftime("%Y%m%d").data)
+            end_date = str(ds.time[-1].dt.strftime("%Y%m%d").data)
+            fnameout = ncfiles[0].rsplit("_", 1)[0] + f"_{start_date}-{end_date}.nc"
+            #     Path(tmpfile).replace(filename)
+            ds.to_netcdf(fnameout)
+        else:
+            raise FileNotFoundError("No nc files found in folder!")
+    
     filename.with_suffix(".zip").unlink(missing_ok=True)
 
 

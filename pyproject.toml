@@ -7,7 +7,11 @@ requires-python = ">=3.10"
 dependencies = [
   "cdsapi>=0.7.7",
   "country-bounding-boxes>=0.2.3",
+  "dask>=2025.11.0",
+  "netcdf4>=1.7.3",
   "rich>=14.2.0",
+  "spyder-kernels==3.0",
+  "xarray>=2025.6.1",
 ]
 
 [project.scripts]
