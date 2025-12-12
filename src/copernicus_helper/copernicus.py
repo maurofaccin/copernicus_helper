@@ -70,7 +70,7 @@ def get_data_from_copernicus(
 def get_projections_from_copernicus(
     filename: Path,
     resolution: Literal["daily", "monthly"] = "monthly",
-    experiment: Literal["historical", "ssp1_2_6", "ssp2_4_5", "ssp3_7_0"] = "historical",
+    experiment: Literal["historical", "ssp1_2_6", "ssp2_4_5", "ssp3_7_0", "ssp5_8_5"] = "historical",
     model: str = "access_cm2",
     years: tuple[int, int] = (2000, 2025),
     variable: str = "daily_maximum_near_surface_air_temperature",
@@ -205,7 +205,7 @@ def args() -> argparse.ArgumentParser:
         "-x",
         action="store",
         default=None,
-        choices=["historical", "ssp1_2_6", "ssp2_4_5", "ssp3_7_0"],
+        choices=["historical", "ssp1_2_6", "ssp2_4_5", "ssp3_7_0", "ssp5_8_5"],
         help="Download the given expariment from CMIP6.",
     )
     parser.add_argument(
