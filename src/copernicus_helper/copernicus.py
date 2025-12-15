@@ -110,14 +110,17 @@ def get_projections_from_copernicus(
     # Unzip
     print("Unzip")
     client.retrieve(dataset, request).download(filename.with_suffix(".zip"))
+
     with ZipFile(filename.with_suffix(".zip"), "r") as zipped:
         ncfiles = [x for x in zipped.namelist() if x.endswith(".nc")]
         print(ncfiles)
         if len(ncfiles) > 0:
             for item in ncfiles:
                 print(f"Extracting {item}")
-                tmpfile = zipped.extract(member=item, path=filename.parent)
+                zipped.extract(member=item, path=filename.parent)
             print("Joining files...")
+            print(filename)
+            ncfiles = [filename.parent / x for x in ncfiles]
             ds = xr.open_mfdataset(
                 ncfiles,
                 combine="by_coords",  #
@@ -126,14 +129,13 @@ def get_projections_from_copernicus(
 
             start_date = str(ds.time[0].dt.strftime("%Y%m%d").data)
             end_date = str(ds.time[-1].dt.strftime("%Y%m%d").data)
-            fnameout = ncfiles[0].rsplit("_", 1)[0] + f"_{start_date}-{end_date}.nc"
-            #     Path(tmpfile).replace(filename)
+            fnameout = str(filename).rsplit("_", 1)[0] + f"_{start_date}-{end_date}.nc"
             ds.to_netcdf(fnameout)
         else:
             raise FileNotFoundError("No nc files found in folder!")
 
     filename.with_suffix(".zip").unlink(missing_ok=True)
-
+    print("Done")
 
 def get_country(
     code2: str,
