@@ -129,7 +129,7 @@ def get_projections_from_copernicus(
 
             start_date = str(ds.time[0].dt.strftime("%Y%m%d").data)
             end_date = str(ds.time[-1].dt.strftime("%Y%m%d").data)
-            fnameout = str(filename).rsplit("_", 1)[0] + f"_{start_date}-{end_date}.nc"
+            fnameout = str(filename).rsplit(SEP, 1)[0] + f"_{start_date}-{end_date}.nc"
             ds.to_netcdf(fnameout)
         else:
             raise FileNotFoundError("No nc files found in folder!")
