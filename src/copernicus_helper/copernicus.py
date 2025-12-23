@@ -1,6 +1,7 @@
 """Use this to download Copernicus data."""
 
 import argparse
+import logging
 import os
 from pathlib import Path
 from typing import Literal
@@ -9,17 +10,20 @@ from zipfile import ZipFile
 import cdsapi
 import country_bounding_boxes as countries
 import xarray as xr
-from rich import print
+from rich.logging import RichHandler
 
 SEP = ":"
 
 CDSAPI_KEY = os.environ.get("CDSAPI_KEY", None)
 CDSAPI_URL = os.environ.get("CDSAPI_URL", None)
 
-print("Using Key", CDSAPI_KEY)
-print("Using URL", CDSAPI_URL)
-
 CMIP_MODELS = ["access_cm2"]
+
+logging.basicConfig(handlers=[RichHandler()], level="INFO", format="%(message)s", datefmt="[%X]")
+log = logging.getLogger("rich")
+
+log.info(f"Using Key {CDSAPI_KEY}")
+log.info(f"Using URL {CDSAPI_URL}")
 
 
 def get_data_from_copernicus(
@@ -61,8 +65,7 @@ def get_data_from_copernicus(
         "download_format": "unarchived",
         "area": area,
     }
-    for k, v in request.items():
-        print(f"{k:20s} : {v}")
+    log_dict(request, "Request:")
 
     client = cdsapi.Client(url=CDSAPI_URL, key=CDSAPI_KEY)
     client.retrieve(dataset, request).download(filename)
@@ -104,22 +107,20 @@ def get_projections_from_copernicus(
     if resolution == "daily":
         request |= {"day": [f"{d:02d}" for d in range(1, 32)]}
 
-    print(request)
+    log_dict(request, "Request:")
     client = cdsapi.Client(url=CDSAPI_URL, key=CDSAPI_KEY)
 
     # Unzip
-    print("Unzip")
+    log.info("Downloading data")
     client.retrieve(dataset, request).download(filename.with_suffix(".zip"))
 
+    log.info(f"Unzipping data to {filename}")
     with ZipFile(filename.with_suffix(".zip"), "r") as zipped:
         ncfiles = [x for x in zipped.namelist() if x.endswith(".nc")]
-        print(ncfiles)
         if len(ncfiles) > 0:
+            log.info(f"Extracting {len(ncfiles)} parts")
             for item in ncfiles:
-                print(f"Extracting {item}")
                 zipped.extract(member=item, path=filename.parent)
-            print("Joining files...")
-            print(filename)
             ncfiles = [filename.parent / x for x in ncfiles]
             ds = xr.open_mfdataset(
                 ncfiles,
@@ -127,15 +128,30 @@ def get_projections_from_copernicus(
                 coords=["time"],
             )
 
-            start_date = str(ds.time[0].dt.strftime("%Y%m%d").data)
-            end_date = str(ds.time[-1].dt.strftime("%Y%m%d").data)
-            fnameout = str(filename).rsplit(SEP, 1)[0] + f"_{start_date}-{end_date}.nc"
-            ds.to_netcdf(fnameout)
+            ds.to_netcdf(filename)
+            for item in ncfiles:
+                item.unlink()
         else:
             raise FileNotFoundError("No nc files found in folder!")
 
     filename.with_suffix(".zip").unlink(missing_ok=True)
-    print("Done")
+
+
+def log_dict(data: dict, title: str):
+    log.info(title)
+    for k, v in data.items():
+        log.info(f"    - {k}: {repr_value(v)}")
+
+
+def repr_value(val: str | float | int | list) -> str:
+    if isinstance(val, list):
+        if len(val) == 0:
+            return "[]"
+        elif len(val) == 1:
+            return f"{val[0]},"
+        return f"{val[0]}, …, {val[-1]}"
+    return f"{val}"
+
 
 def get_country(
     code2: str,
@@ -163,7 +179,7 @@ def get_country(
     box : list[float]
         The box
     """
-    print("Checking", code2)
+    log.info(f"Getting the country boundind boxes for {code2}")
     if code2 == "full":
         return [90, -180, -90, 180]
 
@@ -175,7 +191,6 @@ def get_country(
 
     # transpose
     boxes = list(zip(*boxes))
-    print(boxes)
     box = [min(boxes[0]), min(boxes[1]), max(boxes[2]), max(boxes[3])]
 
     if padding is not None:
@@ -266,34 +281,34 @@ def main() -> None:
     if arguments.experiment is None and arguments.dataset is None:
         raise ValueError("Arguments: you should supply either the experiment or the dataset.")
     if arguments.experiment is not None:
-        print(f"Experiment:  {arguments.experiment}")
+        log.info(f"Experiment:  {arguments.experiment}")
     elif arguments.dataset is not None:
-        print(f"Dataset:     {arguments.dataset}")
+        log.info(f"Dataset:     {arguments.dataset}")
 
     variable = arguments.variable
-    print(f"Variable:    {variable}")
+    log.info(f"Variable:    {variable}")
     country = arguments.country
     if ":" in country:
         country, subunit = country.split(":")
     else:
         subunit = None
-    print(f"Country:     {country}, {subunit}")
+    log.info(f"Country:     {country}, {subunit}")
     year1, year2 = map(int, arguments.time_range.split("-"))
-    print(f"Year:        {year1} - {year2}")
+    log.info(f"Year:        {year1} - {year2}")
 
     monthly = "monthly" if arguments.monthly else "daily"
     location = cache_location(arguments.folder) / f"{country}{SEP}{monthly}{SEP}{variable}"
     location.mkdir(parents=True, exist_ok=True)
-    print(f"Folder:      {location}")
+    log.info(f"Folder:      {location}")
 
     if arguments.experiment is not None:
         # Get CMIP6 projection data from Copernicus.
+        log.warning("Getting data from CMIP6")
         fname = (
             location / f"{arguments.experiment}{SEP}{arguments.model}{SEP}{arguments.time_range}.nc"
         )
-        print(fname)
         if fname.is_file():
-            print("Already downloaded", fname)
+            log.warning(f"File {fname} is already downloaded")
         else:
             get_projections_from_copernicus(
                 filename=fname,
@@ -306,12 +321,13 @@ def main() -> None:
             )
     elif arguments.dataset is not None:
         # Get re-projection ERA5 data from Copernicus.
+        log.warning("Getting data from ERA5")
         for year in range(year1, year2 + 1):
-            print(f"Downloading {year}")
+            log.info(f"Downloading {year}")
 
             fname = location / f"{arguments.dataset}{SEP}{year}.nc"
             if fname.is_file():
-                print("Already downloaded", fname)
+                log.warning(f"File {fname} is already downloaded")
                 continue
             get_data_from_copernicus(
                 filename=fname,
@@ -320,6 +336,7 @@ def main() -> None:
                 area=get_country(country, subunit=subunit),
                 dataset=arguments.dataset,
             )
+    log.info("Done")
 
 
 if __name__ == "__main__":
