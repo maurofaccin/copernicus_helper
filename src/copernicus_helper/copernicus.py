@@ -19,7 +19,9 @@ CDSAPI_URL = os.environ.get("CDSAPI_URL", None)
 
 CMIP_MODELS = ["access_cm2"]
 
-logging.basicConfig(handlers=[RichHandler()], level="INFO", format="%(message)s", datefmt="[%X]")
+logging.basicConfig(
+    handlers=[RichHandler(rich_tracebacks=True)], level="INFO", format="%(message)s", datefmt="[%X]"
+)
 log = logging.getLogger("rich")
 
 log.info(f"Using Key {CDSAPI_KEY}")
@@ -51,6 +53,7 @@ def get_data_from_copernicus(
     """
     if Path(filename).is_file():
         # do not download the same data multiple times
+        log.warning(f"This file has already been downloaded: {filename}")
         return
 
     dataset = "reanalysis-era5-" + dataset
@@ -88,6 +91,7 @@ def get_projections_from_copernicus(
     Go [here](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=download) to find the other names
     """
     if Path(filename).is_file():
+        log.warning(f"File {filename} is already downloaded")
         # do not download the same data multiple times
         return
 
