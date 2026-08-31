@@ -14,7 +14,7 @@ import requests
 import xarray as xr
 from rich.logging import RichHandler
 
-SEP = ":"
+SEP = "+"
 
 CDSAPI_KEY = os.environ.get("CDSAPI_KEY", None)
 CDSAPI_URL = os.environ.get("CDSAPI_URL", None)
